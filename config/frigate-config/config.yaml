@@ -1,0 +1,161 @@
+# Frigate Configuration - Restructured for better organization and maintainability
+version: 0.16-0
+
+# ====================
+# GLOBAL SERVICES
+# ====================
+tls:
+  enabled: False
+
+mqtt:
+  enabled: false
+
+ffmpeg:
+  hwaccel_args: []
+  # hwaccel_args: preset-vaapi  # Uncomment for hardware acceleration
+
+# ====================
+# OBJECT DETECTION
+# ====================
+
+detectors:
+  coral:
+    type: edgetpu
+    device: usb
+  # cpu1:  # Alternative CPU detector
+  #   type: cpu
+  #   num_threads: 4
+
+# ====================
+# STREAMING CONFIGURATION
+# ====================
+
+go2rtc:
+  enabled: true
+  streams:
+    # Camera 01 - Main and Sub streams
+    <camera-01>:
+      - rtsp://<user>:<password>@<ip>:<port>/Streaming/Channels/101
+      - ffmpeg:<camera-01>#audio=opus
+    <camera-01>-sub:
+      - rtsp://<user>:<password>@<ip>:<port>/Streaming/Channels/102
+      - ffmpeg:<camera-01>-sub#audio=opus
+
+
+# ====================
+# GLOBAL DEFAULTS
+# ====================
+
+# Global recording settings
+record:
+  enabled: true
+  retain:
+    days: 10
+    mode: active_objects
+  alerts:
+    retain:
+      days: 30
+      mode: active_objects
+  detections:
+    retain:
+      days: 14
+      mode: active_objects
+  export:
+    timelapse_args: -vf setpts=PTS/60 -r 25
+  sync_recordings: true
+
+# Global audio settings
+audio:
+  enabled: true
+
+# Global detection settings
+detect:
+  enabled: true
+  width: 640
+  height: 480
+  fps: 10
+  max_disappeared: 25
+
+# Global snapshot settings
+snapshots:
+  enabled: true
+  timestamp: true
+  bounding_box: true
+  retain:
+    default: 14
+    objects:
+      person: 30
+
+# ====================
+# AI FEATURES
+# ====================
+
+semantic_search:
+  enabled: false
+  model_size: small
+
+face_recognition:
+  enabled: false
+  model_size: small
+
+lpr:
+  enabled: false
+
+classification:
+  bird:
+    enabled: false
+
+# ====================
+# CAMERA DEFINITIONS
+# ====================
+
+cameras:
+  # Camera 01 - Ground Floor Passage
+  <camera-01>-01:
+    ffmpeg:
+      output_args:
+        record: preset-record-generic-audio-copy
+      inputs:
+        # High quality stream for recording and audio
+        - path: rtsp://127.0.0.1:8554/<camera-01>-01
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+            - audio
+        # Lower quality stream for detection
+        - path: rtsp://127.0.0.1:8554/<camera-01>-01-sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+
+    # Motion detection
+    motion:
+      threshold: 50
+      contour_area: 40
+      improve_contrast: true
+      lightning_threshold: 0.8
+      delta_alpha: 0.2
+      frame_alpha: 0.01
+
+    # Object tracking and filtering
+    objects:
+      track:
+        - person
+        - cat
+        - dog
+      filters:
+        person:
+          min_area: 5000
+          max_area: 100000
+          threshold: 0.7
+
+# ====================
+# UI ORGANIZATION
+# ====================
+
+    notifications:
+      enabled: true
+
+notifications:
+  enabled: true
+  email: <email>
