@@ -1,0 +1,60 @@
+receivers:
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 10s
+  
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: cadvisor
+          static_configs:
+            - targets: ['cadvisor:8080']
+          scrape_interval: 15s
+  
+  journald:
+    directory: /var/log/journal
+    units:
+      - docker.service
+      - docker.socket
+      - frigate.service
+
+processors:
+  batch:
+    send_batch_size: 100
+    timeout: 10s
+  
+  attributes:
+    actions:
+      - key: service.name
+        value: frigate-monitoring
+        action: insert
+      - key: environment
+        value: homelab
+        action: insert
+
+exporters:
+  otlp:
+    endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${OTEL_EXPORTER_OTLP_HEADERS}
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+extensions:
+  health_check:
+    endpoint: :13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics:
+      receivers: [docker_stats, prometheus]
+      processors: [batch, attributes]
+      exporters: [otlp]
+    logs:
+      receivers: [journald]
+      processors: [batch, attributes]
+      exporters: [otlp]
