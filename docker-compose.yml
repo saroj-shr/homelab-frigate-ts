@@ -1,0 +1,106 @@
+name: frigate-with-tailscale
+
+services:
+  frigate-ts:
+    image: tailscale/tailscale:latest
+    container_name: frigate-ts
+    hostname: frigate-ts
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve-config.json
+      - TS_USERSPACE=false
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+      - ./config/tailscale/serve-config.json:/config/serve-config.json
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+      - NET_RAW
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+  openobserve-collector:
+    image: openobserve/otel-collector:latest
+    container_name: openobserve-collector
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OPENOBSERVE_ENDPOINT}
+      - OTEL_EXPORTER_OTLP_HEADERS=Authorization=${OPENOBSERVE_AUTH}
+      - TZ=Asia/Kathmandu
+    volumes:
+      - ./config/otel-collector/config.yaml:/etc/otel-collector-config.yaml
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    restart: unless-stopped
+    depends_on:
+      - cadvisor
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:13133/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    environment:
+      - TZ=Asia/Kathmandu
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/v1.3/machine"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    
+  frigate:
+    container_name: frigate
+    image: ghcr.io/blakeblackshear/frigate:stable
+    privileged: true # Required for GPU acceleration
+    volumes:
+      - frigate-config:/config
+      - frigate-storage:/media/frigate
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000 # 1GB cache for RAM
+    devices:
+      - /dev/bus/usb:/dev/bus/usb  # USB Coral
+      - /dev/dri/renderD128  # Intel GPU
+    environment:
+      - TZ=Asia/Kathmandu # Adjust to your timezone
+    restart: unless-stopped
+
+volumes:
+  tailscale-state:
+    driver: local
+    driver_opts:
+      type: none
+      device: /mnt/frigate/tailscale-state
+      o: bind
+  frigate-config:
+    driver: local
+    driver_opts:
+      type: none
+      device: /mnt/frigate/frigate-config
+      o: bind
+  frigate-storage:
+    driver: local
+    driver_opts:
+      type: none
+      device: /mnt/frigate/frigate-storage
+      o: bind
