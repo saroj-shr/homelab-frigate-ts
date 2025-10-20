@@ -11,3 +11,7 @@ DIRS=(
 for DIR in "${DIRS[@]}"; do
   mkdir -p "$DIR"
 done
+
+cp .env-example .env
+
+echo " Done!"

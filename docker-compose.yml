@@ -27,7 +27,7 @@ services:
       start_period: 90s
 
   openobserve-collector:
-    image: openobserve/otel-collector:latest
+    image : otel/opentelemetry-collector-contrib
     container_name: openobserve-collector
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OPENOBSERVE_ENDPOINT}
@@ -35,6 +35,7 @@ services:
       - TZ=Asia/Kathmandu
     volumes:
       - ./config/otel-collector/config.yaml:/etc/otel-collector-config.yaml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log/journal:/var/log/journal:ro
       - /run/log/journal:/run/log/journal:ro
     command: ["--config=/etc/otel-collector-config.yaml"]
@@ -65,7 +66,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    
+
   frigate:
     container_name: frigate
     image: ghcr.io/blakeblackshear/frigate:stable
