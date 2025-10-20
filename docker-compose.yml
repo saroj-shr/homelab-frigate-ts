@@ -1,5 +1,9 @@
 name: frigate-with-tailscale
 
+networks:
+  frigate-net:
+    driver: bridge
+
 services:
   frigate-ts:
     image: tailscale/tailscale:latest
@@ -18,6 +22,8 @@ services:
       - NET_ADMIN
       - SYS_MODULE
       - NET_RAW
+    networks:
+      - frigate-net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "tailscale", "status"]
@@ -26,66 +32,28 @@ services:
       retries: 3
       start_period: 90s
 
-  openobserve-collector:
-    image : otel/opentelemetry-collector-contrib
-    container_name: openobserve-collector
-    environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OPENOBSERVE_ENDPOINT}
-      - OTEL_EXPORTER_OTLP_HEADERS=Authorization=${OPENOBSERVE_AUTH}
-      - TZ=Asia/Kathmandu
-    volumes:
-      - ./config/otel-collector/config.yaml:/etc/otel-collector-config.yaml
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /var/log/journal:/var/log/journal:ro
-      - /run/log/journal:/run/log/journal:ro
-    command: ["--config=/etc/otel-collector-config.yaml"]
-    restart: unless-stopped
-    depends_on:
-      - cadvisor
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:13133/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
-    container_name: cadvisor
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-    environment:
-      - TZ=Asia/Kathmandu
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/v1.3/machine"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
   frigate:
     container_name: frigate
     image: ghcr.io/blakeblackshear/frigate:stable
-    privileged: true # Required for GPU acceleration
+    privileged: true
+    shm_size: '256mb'
     volumes:
       - frigate-config:/config
       - frigate-storage:/media/frigate
       - type: tmpfs
         target: /tmp/cache
         tmpfs:
-          size: 1000000000 # 1GB cache for RAM
+          size: 1000000000
     devices:
-      - /dev/bus/usb:/dev/bus/usb  # USB Coral
-      - /dev/dri/renderD128  # Intel GPU
+      - /dev/bus/usb:/dev/bus/usb
     environment:
-      - TZ=Asia/Kathmandu # Adjust to your timezone
+      - TZ=Asia/Kathmandu
+    networks:
+      - frigate-net
     restart: unless-stopped
     depends_on:
-      - frigate-ts
+      frigate-ts:
+        condition: service_healthy
 
 volumes:
   tailscale-state:
